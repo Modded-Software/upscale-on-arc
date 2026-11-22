@@ -1,0 +1,52 @@
+[project]
+name = "upscale-on-arc"
+version = "0.4.0"
+description = "4x texture upscaling on Intel Arc GPUs (PyTorch XPU)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "torch",
+    "torchvision",
+    # Needed by torch+xpu. Listed here so it can be routed to the XPU index,
+    # as the uv PyTorch guide says: https://docs.astral.sh/uv/guides/integration/pytorch/
+    "triton-xpu",
+    "spandrel",
+    "pillow",
+    "pydantic>=2.14",
+    "numpy",
+    # Needed by the SeedVR2 code, which is not a package. This is the rest of its
+    # requirements.txt at the commit pinned in arc_upscale/catalog.py.
+    "safetensors",
+    "tqdm",
+    "psutil",
+    "einops",
+    "omegaconf>=2.3.0",
+    "diffusers>=0.33.1",
+    "peft>=0.17.0",
+    "rotary_embedding_torch>=0.5.3",
+    "opencv-python",
+    "gguf",
+    "matplotlib",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+    "shellcheck-py",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.uv.sources]
+torch = { index = "pytorch-xpu" }
+torchvision = { index = "pytorch-xpu" }
+triton-xpu = { index = "pytorch-xpu" }
+
+[[tool.uv.index]]
+name = "pytorch-xpu"
+url = "https://download.pytorch.org/whl/xpu"
+explicit = true

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# arc-upscale: 4x texture upscaling on Intel Arc GPUs.
+# This only finds the project and starts upscale.py (the arc_upscale package) in its uv environment.
+set -euo pipefail
+
+# The project is the directory of this script, with symlinks followed.
+root="${ARC_UPSCALE_ROOT:-$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")}"
+
+if ! uv="$(command -v uv)"; then
+    echo "arc-upscale: error: uv is not installed. See https://docs.astral.sh/uv/" >&2
+    exit 1
+fi
+
+# The package reads the project directory from here: it is the single source.
+export ARC_UPSCALE_ROOT="$root"
+exec "$uv" --project "$root" run python "$root/upscale.py" "$@"

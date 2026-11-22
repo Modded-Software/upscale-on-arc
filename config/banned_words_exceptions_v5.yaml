@@ -1,0 +1,13 @@
+exceptions:
+  - rule: bimportlib-b
+    path: ^uv\.lock$
+    rationale: uv.lock names the third-party package importlib-metadata, a dependency of diffusers. It is a package name, not a dynamic import.
+    owner: upscale-on-arc
+    review_date: '2026-11-22'
+    removal: Remove when no locked package is named importlib-metadata.
+  - rule: blazy-b
+    path: ^uv\.lock$
+    rationale: uv.lock names the third-party package lazy-importer, a dependency of importlib-metadata. It is a package name, not lazy evaluation.
+    owner: upscale-on-arc
+    review_date: '2026-11-22'
+    removal: Remove when no locked package is named lazy-importer.
