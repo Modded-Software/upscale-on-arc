@@ -171,8 +171,8 @@ Done on 2026-11-15. All GPU work ran on GPU 1 (`0000:09:00.0`).
 ### Open
 
 1. **A8: the normal launcher path is still unproven here.** In the agent's shell every bash script is run from memory, so `BASH_SOURCE` is `/proc/self/fd/3` and the project resolves to `/`. This also applies to scripts started by pytest. The three failing tests are correct for a normal shell and were left unchanged. **Run `make test GPU=1` once in a normal terminal.** If they fail there, the launcher line `arc-upscale:7` is wrong.
-2. **Nothing is committed.** See G2.
-3. **`tools/` is still on disk.** See E6.
+2. ~~Nothing is committed.~~ Closed 2026-11-22: see "First commit" at the end.
+3. ~~`tools/` is still on disk.~~ Closed 2026-11-22: deleted.
 4. **`~/.local/bin/arc-upscale` is not installed.** See C2.
 5. **No licence.** G3 needs the owner's decision.
 
@@ -220,14 +220,14 @@ Done on 2026-11-15. All GPU work ran on GPU 1 (`0000:09:00.0`).
 | E3 | Fixed | Alpha is checked with Pillow. |
 | E4 | Unchanged by nature | The thresholds are still regression guards chosen with the results known: sharper than 1.15x bicubic, PSNR within 2 dB of bicubic, wrap ratio below 1.5, tiled vs single pass above 40 dB, alpha above 20 dB. The README calls it a basic check. |
 | E5 | Fixed | Tests call the functions directly. No crop box, no file-name coupling. |
-| E6 | **Partly** | `tools/` is no longer tracked or used. It is still on disk: the shell guard blocked `git rm -r -f tools` and allowed only `git rm --cached`. Deleting it another way would sidestep that block, so it was left. To finish: `rm -r tools`. |
+| E6 | Fixed | `tools/` was deleted on 2026-11-22, on the owner's decision. |
 | E7 | Unchanged | Same two textures. The README states the limit. |
 | F1 | Fixed | The README says the models were chosen by web research, not benchmarked, and were released in May 2025. |
 | F2 | Fixed | Hand-copied quality figures are gone. Only timings measured in this pass remain. |
 | F3 | Fixed | 72 lines. |
 | F4 | Fixed | No "how it works" section. |
 | G1 | Noted | Past churn. Nothing to fix. |
-| G2 | **Open** | See the commit result at the end of this log. |
+| G2 | Fixed | First commit `b35fa07` on 2026-11-22. See "First commit" at the end. |
 | G3 | **Open** | Owner's decision. |
 | G4 | Partly | All scratch work since the audit used the private directory `/tmp/opencode/upscale-on-arc/`. The older generic-named files in `/tmp/opencode` were not touched: it cannot be shown that they are this project's. |
 | G5-G8 | Noted | Process findings. |
@@ -345,4 +345,80 @@ E4 still applies, more so: the 5 dB margin was chosen with the result known.
 2. Quality was checked by eye on one brick texture and by basic checks on two. That is not a quality evaluation.
 3. The cause of the corruption in finding 1 is not known below PyTorch. It could return under memory pressure from another program on the same card. The non-finite guard catches only part of such output.
 4. Upstream prints a false warning at start: `Memory check failed: No GPU backend available (CUDA/MPS)`.
+
+## First commit
+
+Done on 2026-11-22. Commit `b35fa07`, pushed to `git@github.com:Modded-Software/upscale-on-arc.git`, branch `master`.
+
+### What changed to get it through the hooks
+
+| Hook | Finding | Change |
+|---|---|---|
+| CI integrity | No hooks | workspace-ci scaffolding (`ci-profile.yaml`, Python only), then `make install-hooks` and `lock-repo --config-only` as root. |
+| check-trusted-exec | NUL bytes in the test PNGs | The three PNGs classified as `binary` in `config/file_classifications.yaml` (root). |
+| ci-check-error-swallow | 4 findings | sysfs and fdinfo reads check the file before reading. Test subprocesses use `check=True`; failures carry stderr. |
+| check-file-length | `upscale.py` 547 lines | Split into the `arc_upscale` package: `errors`, `catalog`, `fetch`, `gpus`, `upscalers`, `upscaling`, `files`, `cli`. `upscale.py` is the entry point. |
+| check-dependency-versions | `uv.lock` lacks `provides-extras` | `provides-extras = []` added by hand. `uv lock` 0.11.26 removes it again; add it back after each re-lock. |
+| check-banned-words | Prose, dataclasses, chained parent-path navigation, a bare interpreter call | Prose reworded. `ModelFile` and `Gpu` are frozen Pydantic models. The launcher exports `ARC_UPSCALE_ROOT`; the package reads `models/` from there only and stops if it is unset. Two exemptions in `uv.lock` (root), for two third-party package names that match banned words. See `config/banned_words_exceptions_v5.yaml`. |
+| check-commit-message | Security-control paths | Body with `Known defects:`, and `Operator-Review: root 2026-11-22`. |
+| check-dead-code (pre-push) | Skipped | `dangle` is not installed. |
+
+`tools/` was deleted (E6).
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `make lint` | Clean. |
+| `make test GPU=1`, last run | 103 passed, 2 skipped, 4 failed. |
+| 3 of the failures | The launcher tests of A8, unchanged: in the agent shell the project resolves to `/`. |
+| 4th failure | `test_seedvr2_default_run_on_a_whole_texture_is_sound`: the invalid-values guard fired. It failed in two full runs and passed twice alone. Two model servers held about 8.2 GiB on GPU 1 at the time. Not proven to be the cause. |
+
+### Open
+
+1. A8: run `make test GPU=1` once in a normal terminal.
+2. The SeedVR2 test above: run the full suite with GPU 1 free.
+
+## Job queue
+
+Done on 2026-11-24. All GPU work ran on GPU 1.
+
+### Choice
+
+WORKSPACE-RP was checked first and not used. Its task engine tracks work for people; it has no claim, lease or worker operation, and its own requirements say it is not an execution engine (`docs/requirements/REQ-TASK-ENGINE.md`). Its only claim and acknowledge code is the Postgres outbox of `srp-bridge`, which delivers events, not jobs.
+The owner chose a spool directory on one host, from four options: spool directory, SQLite, `task-spooler`, a network broker.
+
+### What changed
+
+| Item | Change |
+|---|---|
+| `arc_upscale/jobs.py` | New. A job is one JSON file; its directory is its state: `pending/`, `working/gpu<N>/`, `done/`, `failed/`. A claim is a rename, which only one worker can win. A `flock` file allows one worker per GPU. |
+| `arc_upscale/cli.py` | New commands `submit`, `worker`, `queue`. `run` and the worker share `upscale_files`. A worker keeps one model loaded (`ModelSlot`) and replaces it for a job with another model. |
+| `arc_upscale/catalog.py` | `project_root()`, used for `models/` and `queue/`. |
+| `.gitignore` | `queue/`. |
+| `README.md` | "Queue" section. The advice to split textures over GPUs by hand is gone. |
+| Tests | `tests/test_queue.py`, 14 tests without a GPU. One GPU test in `tests/test_gpu.py`. |
+
+### Behaviour
+
+- A `UserError` (unreadable image, out of memory, missing model) moves the job to `failed/` with the error. The worker goes on.
+- Any other error stops the worker. Its job stays in `working/gpu<N>/`. The next worker on that GPU puts it back in `pending/` first.
+- `submit` checks the input, the model and the tile, and stores absolute paths.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `make lint` | Clean. |
+| `make test GPU=1` | **119 passed, 2 skipped, 3 failed.** The 3 are the launcher tests of A8, unchanged. The SeedVR2 whole texture test of "First commit" passed in this run. |
+| Race test | 4 processes, started together by a barrier, on 300 jobs: each job taken exactly once. Passed in 11 runs. |
+| Mutation check | With the claim changed to copy-then-delete, the race test failed. The rename was restored. |
+| Banned words, error swallow | The workspace-ci checkers pass on every changed file. |
+
+### Open
+
+1. A job that crashes the worker every time is requeued on every restart. It has to be removed by hand.
+2. Nothing prunes `queue/done/`.
+3. One host, local filesystem only: not every network filesystem renames atomically.
+4. A worker's output to a pipe or file is block-buffered by Python, so log lines can arrive late.
 

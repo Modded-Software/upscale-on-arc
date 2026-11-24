@@ -14,12 +14,17 @@ ROOT_VARIABLE = "ARC_UPSCALE_ROOT"
 RELEASES = "https://github.com/Kim2091/Kim2091-Models/releases/download"
 
 
-def models_dir() -> Path:
-    """`models/` in the project named by ARC_UPSCALE_ROOT. Models and the SeedVR2 code are kept there."""
+def project_root() -> Path:
+    """The project directory named by ARC_UPSCALE_ROOT."""
     root = os.environ.get(ROOT_VARIABLE, "")
     if not root:
         raise UserError(f"{ROOT_VARIABLE} is not set; run through the arc-upscale command, or make test")
-    return Path(root) / "models"
+    return Path(root)
+
+
+def models_dir() -> Path:
+    """`models/` in the project. Models and the SeedVR2 code are kept there."""
+    return project_root() / "models"
 
 
 class ModelFile(BaseModel):

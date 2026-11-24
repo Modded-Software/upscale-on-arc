@@ -8,7 +8,7 @@ You need Linux, an Intel Arc GPU with the Level Zero driver, and [uv](https://do
 On Ubuntu the driver is `sudo apt install libze1 libze-intel-gpu1`.
 
 ```bash
-make install    # links arc-upscale into ~/.local/bin; set BINDIR to change that
+make install    # uv sync --frozen, then links arc-upscale into ~/.local/bin; set BINDIR to change that
 ```
 
 Or skip this and call the script by its path. It works from any directory.
@@ -31,7 +31,26 @@ arc-upscale run --help                          # all options
 - `--tiling` makes opposite edges match, for textures that tile.
 - `--tile N` sets the tile size. Lower it if the GPU runs out of memory.
 - `-g N` picks the GPU by the number that `gpus` prints. The default is 0.
-- With two GPUs, run two commands at once, one per GPU, each on half of the textures. One run cannot use both: see "SeedVR2 and VRAM".
+- One run uses one GPU: see "SeedVR2 and VRAM". To use several, queue the work (below).
+
+## Queue
+
+```bash
+arc-upscale worker -g 0 &                       # one worker per GPU; it waits for jobs
+arc-upscale worker -g 1 &
+arc-upscale submit textures/ -o textures_4x/    # takes the same options as run
+arc-upscale submit -m pbrify --tiling wall.png
+arc-upscale queue                               # pending, running, done and failed jobs
+```
+
+- A worker keeps its model loaded between jobs. A job for another model replaces it.
+- Each job is a JSON file in `queue/` in the project. `--queue DIR` picks another directory, for every command that uses it.
+- `submit` checks the input and the model, and stores absolute paths. Workers run in any directory.
+- A job that fails, for example on an unreadable image or with too little VRAM, goes to `queue/failed/` with its error. The worker goes on with the next one. Any other error stops the worker.
+- A worker that stops leaves its job in `queue/working/gpu<N>/`. The next worker on that GPU puts it back in the queue first. A job that crashes the worker every time would loop, so it needs to be removed by hand.
+- `worker --until-empty` stops when no job is left.
+- Done jobs stay in `queue/done/` until you delete them.
+- Workers claim jobs by renaming files, so the queue must be on a local filesystem on the same host.
 
 ## Models
 
@@ -112,6 +131,7 @@ The code is the `arc_upscale` package. `upscale.py` is only the entry point that
 | `upscalers` | A model loaded onto one GPU, called per patch |
 | `upscaling` | Tiles, tiling mode and alpha, for whole images |
 | `files` | Input discovery and output names |
+| `jobs` | The job queue, in a spool directory |
 | `cli` | The commands |
 
 SeedVR2's code is not a Python package. `arc_upscale/catalog.py` pins one upstream commit, and `fetch` downloads that source archive, checksum-verified, into `models/`. Upstream has no Intel GPU support. Three things were needed, all in `SeedVR2Upscaler`:

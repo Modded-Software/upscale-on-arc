@@ -154,6 +154,16 @@ def test_unreadable_image_is_reported(tmp_path: Path, gpu: gpus.Gpu, capsys: pyt
     assert f"arc-upscale: error: not a readable image: {broken}\n" in capsys.readouterr().err
 
 
+def test_worker_runs_a_queued_job_on_the_gpu(tmp_path: Path, gpu: gpus.Gpu) -> None:
+    low_res(load(TEXTURES[0])).save(tmp_path / "wall.png")
+    queue, out = str(tmp_path / "queue"), str(tmp_path / "out")
+    assert cli.main(["submit", "--queue", queue, "-m", "fast", "-o", out, str(tmp_path / "wall.png")]) == 0
+    assert cli.main(["worker", "--queue", queue, "-g", str(gpu.index), "--until-empty"]) == 0
+    with Image.open(tmp_path / "out" / "wall_4x.png") as image:
+        assert image.size == (LOW * 4, LOW * 4)
+    assert len(list((tmp_path / "queue" / "done").glob("*.json"))) == 1
+
+
 def run_checked(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     """Run a command; a non-zero exit raises CalledProcessError, which holds stdout and stderr."""
     return subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, check=True)
